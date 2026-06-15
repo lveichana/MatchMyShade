@@ -1,0 +1,27 @@
+{
+    "oily": {
+        "finish": "Matte",
+        "coverage": "Medium to Full",
+        "tips": "Pilih foundation dengan hasil akhir matte atau oil-control. Gunakan primer pada area yang mudah berminyak dan set foundation dengan bedak secukupnya."
+    },
+    "dry": {
+        "finish": "Dewy / Luminous",
+        "coverage": "Light to Medium",
+        "tips": "Pilih foundation dengan hasil akhir dewy atau hydrating. Gunakan moisturizer sebelum foundation dan hindari penggunaan bedak berlebihan."
+    },
+    "combination": {
+        "finish": "Natural / Satin",
+        "coverage": "Medium",
+        "tips": "Gunakan primer pada area T-zone yang cenderung berminyak. Pilih foundation dengan hasil akhir natural atau satin agar area wajah terlihat seimbang."
+    },
+    "normal": {
+        "finish": "Natural / Satin",
+        "coverage": "Light to Medium",
+        "tips": "Kulit normal cenderung fleksibel dalam memilih foundation. Pilih finish dan coverage sesuai hasil akhir yang diinginkan."
+    },
+    "sensitive": {
+        "finish": "Natural",
+        "coverage": "Light to Medium",
+        "tips": "Pilih produk yang ringan, minim fragrance, dan lakukan patch test sebelum menggunakan produk baru. Hindari produk dengan kandungan yang berpotensi mengiritasi kulit."
+    }
+}

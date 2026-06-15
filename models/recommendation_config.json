@@ -1,0 +1,56 @@
+{
+    "target_lightness": {
+        "Fair": 0.8,
+        "Medium": 0.6,
+        "Tan": 0.43,
+        "Deep": 0.25
+    },
+    "lightness_range": {
+        "Fair": [
+            0.65,
+            1.0
+        ],
+        "Medium": [
+            0.5,
+            0.65
+        ],
+        "Tan": [
+            0.35,
+            0.5
+        ],
+        "Deep": [
+            0.0,
+            0.35
+        ]
+    },
+    "skin_type_rules": {
+        "oily": {
+            "finish": "Matte",
+            "coverage": "Medium to Full",
+            "tips": "Pilih foundation dengan hasil akhir matte atau oil-control. Gunakan primer pada area yang mudah berminyak dan set foundation dengan bedak secukupnya."
+        },
+        "dry": {
+            "finish": "Dewy / Luminous",
+            "coverage": "Light to Medium",
+            "tips": "Pilih foundation dengan hasil akhir dewy atau hydrating. Gunakan moisturizer sebelum foundation dan hindari penggunaan bedak berlebihan."
+        },
+        "combination": {
+            "finish": "Natural / Satin",
+            "coverage": "Medium",
+            "tips": "Gunakan primer pada area T-zone yang cenderung berminyak. Pilih foundation dengan hasil akhir natural atau satin agar area wajah terlihat seimbang."
+        },
+        "normal": {
+            "finish": "Natural / Satin",
+            "coverage": "Light to Medium",
+            "tips": "Kulit normal cenderung fleksibel dalam memilih foundation. Pilih finish dan coverage sesuai hasil akhir yang diinginkan."
+        },
+        "sensitive": {
+            "finish": "Natural",
+            "coverage": "Light to Medium",
+            "tips": "Pilih produk yang ringan, minim fragrance, dan lakukan patch test sebelum menggunakan produk baru. Hindari produk dengan kandungan yang berpotensi mengiritasi kulit."
+        }
+    },
+    "default_top_n": 5,
+    "recommendation_type": "similarity-based and rule-based",
+    "note": "Products are recommended based on lightness distance. Skin type is used for finish, coverage, and tips only because the dataset does not provide complete formula/finish attributes."
+}

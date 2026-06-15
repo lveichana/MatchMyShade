@@ -1,0 +1,47 @@
+{
+    "model_name": "MobileNetV2 Fine-tuned",
+    "image_size": 224,
+    "batch_size": 32,
+    "samples_per_class": 5000,
+    "train_ratio": 0.7,
+    "val_ratio": 0.15,
+    "test_ratio": 0.15,
+    "epochs_frozen": 10,
+    "epochs_finetune": 30,
+    "augmentation": [
+        "RandomFlip(horizontal)",
+        "RandomRotation(0.08)",
+        "RandomZoom(0.1)",
+        "RandomBrightness(0.15)",
+        "RandomContrast(0.15)"
+    ],
+    "num_classes": 4,
+    "class_names_original": [
+        "dark",
+        "light",
+        "mid-dark",
+        "mid-light"
+    ],
+    "mapped_class_names": [
+        "Deep",
+        "Fair",
+        "Tan",
+        "Medium"
+    ],
+    "display_labels": {
+        "0": "Deep",
+        "1": "Fair",
+        "2": "Tan",
+        "3": "Medium"
+    },
+    "label_mapping": {
+        "dark": "Deep",
+        "light": "Fair",
+        "mid-dark": "Tan",
+        "mid-light": "Medium"
+    },
+    "test_accuracy": 0.8656666666666667,
+    "test_precision": 0.8638753604158196,
+    "test_recall": 0.8656666666666667,
+    "test_f1_score": 0.8645963512121939
+}

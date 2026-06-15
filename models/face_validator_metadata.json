@@ -1,0 +1,25 @@
+{
+    "model_name": "MobileNetV2 Face Validator",
+    "task": "binary_classification",
+    "image_size": 224,
+    "batch_size": 32,
+    "epochs": 10,
+    "class_names": [
+        "human_faces",
+        "non_human_faces"
+    ],
+    "label_0_class": "human_faces",
+    "label_1_class": "non_human_faces",
+    "human_class": "human_faces",
+    "human_label": 0,
+    "output_score_meaning": "probability_of_label_1_class",
+    "threshold": 0.5,
+    "test_accuracy": 0.9981224183251971,
+    "test_precision": 0.9986979166666666,
+    "test_recall": 0.9948119325551232,
+    "test_f1": 0.9967511371020142,
+    "human_precision": 0.9978891820580474,
+    "human_recall": 0.9994714587737844,
+    "human_f1": 0.9986796936889358,
+    "training_time_minutes": 5.100354154904683
+}
