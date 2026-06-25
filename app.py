@@ -1,8 +1,6 @@
 import json
 import base64
 from pathlib import Path
-from urllib.parse import quote_plus
-from html import escape
 
 import cv2
 import numpy as np
@@ -11,10 +9,19 @@ import streamlit as st
 import tensorflow as tf
 from PIL import Image
 
+from shade_card import create_shade_card_png
+from ui_helpers import (
+    normalize_tips,
+    render_tone_box,
+    render_confidence_bars,
+    render_product_cards,
+    render_match_summary,
+    render_faq,
+)
+
 # ============================================================
 # PAGE CONFIG
 # ============================================================
-
 
 st.set_page_config(
     page_title="MatchMyShade",
@@ -26,7 +33,7 @@ st.set_page_config(
 # CUSTOM CSS
 # ============================================================
 
-# Load external CSS file agar app.py tetap bersih
+# Load external CSS file 
 CSS_PATH = Path("styles.css")
 if CSS_PATH.exists():
     css = CSS_PATH.read_text(encoding="utf-8")
@@ -36,24 +43,28 @@ else:
 
 
 # ============================================================
-# PATHS — lokasi model, aset, dan data
+# PATHS — lokasi model, data, dan aset
 # ============================================================
 
-BASE_DIR          = Path("models")
+# MODEL_DIR khusus untuk file model (.keras) beserta metadata-nya.
+# DATA_DIR khusus untuk dataset dan konfigurasi recommendation system.
+# Dipisah agar struktur folder semantically correct: model != data.
+MODEL_DIR         = Path("models")
+DATA_DIR          = Path("data")
 ASSET_DIR         = Path("assets")
 HEADER_IMAGE_PATH = ASSET_DIR / "matchmyshade_header.png"
 
 # Model files
-SKIN_MODEL_PATH   = BASE_DIR / "final_mobilenetv2_skin_tone.keras"
-SKIN_META_PATH    = BASE_DIR / "model_metadata.json"
-FACE_MODEL_PATH   = BASE_DIR / "face_validator_model.keras"
-FACE_META_PATH    = BASE_DIR / "face_validator_metadata.json"
+SKIN_MODEL_PATH   = MODEL_DIR / "final_mobilenetv2_skin_tone.keras"
+SKIN_META_PATH    = MODEL_DIR / "model_metadata.json"
+FACE_MODEL_PATH   = MODEL_DIR / "face_validator_model.keras"
+FACE_META_PATH    = MODEL_DIR / "face_validator_metadata.json"
 
 # Data files
-FOUNDATION_CSV_PATH  = BASE_DIR / "foundation_products_cleaned.csv"
-TARGET_L_PATH        = BASE_DIR / "target_lightness.json"
-LIGHTNESS_RANGE_PATH = BASE_DIR / "lightness_range.json"
-SKIN_TYPE_RULES_PATH = BASE_DIR / "skin_type_rules.json"
+FOUNDATION_CSV_PATH  = DATA_DIR / "foundation_products_cleaned.csv"
+TARGET_L_PATH        = DATA_DIR / "target_lightness.json"
+LIGHTNESS_RANGE_PATH = DATA_DIR / "lightness_range.json"
+SKIN_TYPE_RULES_PATH = DATA_DIR / "skin_type_rules.json"
 
 # Semua file yang wajib ada sebelum app bisa jalan
 REQUIRED_FILES = [
@@ -72,7 +83,7 @@ CONFIDENCE_THRESHOLD = 0.60   # batas minimum confidence sebelum dianggap ambigu
 FACE_CROP_MARGIN     = 0.35   # padding di sekitar face crop (rasio)
 DEFAULT_TOP_N        = 6      # jumlah rekomendasi produk default
 
-# Warna representasi tiap skin tone untuk UI
+# Warna representasi tiap skin tone untuk UI.
 SKIN_TONE_COLORS = {
     "Fair"  : "#F3D7C2",
     "Medium": "#C98F68",
@@ -83,11 +94,11 @@ ALL_SKIN_TONES = ["Fair", "Medium", "Tan", "Deep"]
 
 # Label skin type untuk dropdown (bilingual)
 SKIN_TYPE_LABELS = {
-    "oily"       : "Oily — Berminyak",
-    "dry"        : "Dry — Kering",
-    "combination": "Combination — Kombinasi",
+    "oily"       : "Oily (Berminyak)",
+    "dry"        : "Dry (Kering)",
+    "combination": "Combination (Kombinasi)",
     "normal"     : "Normal",
-    "sensitive"  : "Sensitive — Sensitif",
+    "sensitive"  : "Sensitive (Sensitif)",
 }
 
 # Label pendek untuk summary card
@@ -233,12 +244,6 @@ def calculate_dynamic_target(probabilities, target_lightness):
             total += float(prob)
     return val / total if total > 0 else None
 
-def normalize_tips(tips):
-    """Ubah tips dari list atau string menjadi string yang aman untuk ditampilkan."""
-    if isinstance(tips, list):
-        return " ".join(str(tip) for tip in tips)
-    return str(tips)
-
 def recommend_foundation(skin_tone, skin_type, df, target_lightness,
                          lightness_range, skin_type_rules, top_n, target_override=None):
     """Cari shade foundation paling mendekati target lightness berdasarkan skin tone final."""
@@ -248,7 +253,7 @@ def recommend_foundation(skin_tone, skin_type, df, target_lightness,
     target = float(target_override) if target_override is not None else float(target_lightness[skin_tone])
     rule = skin_type_rules.get(skin_type, skin_type_rules.get("normal", {}))
 
-    # Pool produk diambil dari kategori skin tone hasil mapping notebook 03.
+    # Pool produk diambil dari kategori skin tone hasil mapping
     if "skin_tone" in df.columns:
         pool = df[df["skin_tone"] == skin_tone].copy()
     else:
@@ -316,16 +321,16 @@ def run_pipeline(pil_img, skin_type, top_n, face_model, face_meta,
     ambiguity  = check_ambiguity(prediction["probabilities"])
 
     # Step 4: tentukan tone final
-    # AI prediction memakai dynamic target berdasarkan confidence tiap foto.
-    # Manual correction memakai target tetap dari skin tone pilihan user.
+    # Dynamic target selalu dihitung dari probabilitas prediksi AI, baik
+    # untuk hasil AI maupun manual correction, agar rekomendasi tetap personal.
+    dynamic_target = calculate_dynamic_target(prediction["probabilities"], target_lightness)
+
     if manual_tone and manual_tone in target_lightness:
-        final_tone     = manual_tone
-        tone_source    = "manual_correction"
-        dynamic_target = float(target_lightness[manual_tone])
+        final_tone  = manual_tone
+        tone_source = "manual_correction"
     else:
-        final_tone     = prediction["predicted_skin_tone"]
-        tone_source    = "ai_prediction"
-        dynamic_target = calculate_dynamic_target(prediction["probabilities"], target_lightness)
+        final_tone  = prediction["predicted_skin_tone"]
+        tone_source = "ai_prediction"
 
     # Step 5: rekomendasikan foundation
     rec = recommend_foundation(
@@ -355,16 +360,18 @@ def build_final_recommendation(base_result, skin_type_key, manual_tone, top_n,
     Rebuild rekomendasi setelah user mengubah manual tone atau jumlah produk.
     Dipanggil tiap kali Customize Results diubah.
     """
+    # Dynamic target tetap dari probabilitas AI 
+    # skin tone yang berubah saat manual correction dipilih.
+    dynamic_target = calculate_dynamic_target(
+        base_result["prediction"]["probabilities"], target_lightness
+    )
 
     if manual_tone and manual_tone in target_lightness:
-        final_tone     = manual_tone
-        tone_source    = "manual_correction"
-        dynamic_target = float(target_lightness[manual_tone])
+        final_tone  = manual_tone
+        tone_source = "manual_correction"
     else:
-        final_tone     = base_result["prediction"]["predicted_skin_tone"]
-        tone_source    = "ai_prediction"
-        dynamic_target = calculate_dynamic_target(
-            base_result["prediction"]["probabilities"], target_lightness)
+        final_tone  = base_result["prediction"]["predicted_skin_tone"]
+        tone_source = "ai_prediction"
 
     rec = recommend_foundation(
         final_tone, skin_type_key, df_foundation,
@@ -379,121 +386,18 @@ def build_final_recommendation(base_result, skin_type_key, manual_tone, top_n,
         "recommendation" : rec,
     }
 
-# ============================================================
-# UI HELPERS
-# ============================================================
-
-def render_tone_box(tone, color):
-    """Kotak warna skin tone untuk bagian 'Skin tone categories'."""
-    txt = "#2C1A1D" if tone in ["Fair", "Medium"] else "#FFF8F8"
-    st.markdown(
-        f'<div class="tone-box" style="background:{color};color:{txt};">{tone}</div>',
-        unsafe_allow_html=True,
-    )
-
-def render_confidence_bars(probabilities, final_tone):
-    """Bar chart horizontal untuk menampilkan confidence tiap skin tone."""
-    for label, prob in sorted(probabilities.items(), key=lambda x: -x[1]):
-        fill_color = "#C2748A" if label == final_tone else "rgba(194,116,138,0.35)"
-        weight     = "700"    if label == final_tone else "400"
-        st.markdown(f"""
-        <div class="conf-row">
-            <div class="conf-label-row">
-                <span style="font-weight:{weight};">{label}</span>
-                <span style="opacity:0.65;">{prob:.1%}</span>
-            </div>
-            <div class="conf-track">
-                <div class="conf-fill" style="width:{prob*100:.1f}%;background:{fill_color};"></div>
-            </div>
-        </div>""", unsafe_allow_html=True)
-
-def get_search_url(prod):
-    """Buat URL Google Search untuk produk foundation tertentu."""
-    q = f"{prod.get('brand','')} {prod.get('product','')} {prod.get('shade_name','')} {prod.get('shade_code','')} foundation"
-    return "https://www.google.com/search?q=" + quote_plus(q.strip())
-
-def render_product_cards(products, final_tone, rec):
-    """Render grid card untuk tiap produk foundation yang direkomendasikan."""
-    cards = []
-    for i, prod in enumerate(products, start=1):
-        shade_name  = str(prod.get("shade_name", prod.get("product", "")))
-        shade_code  = str(prod.get("shade_code", ""))
-        shade_text  = f"{shade_name} · {shade_code}" if shade_code and shade_code not in ("-", "nan", "None") else shade_name
-        hex_color   = str(prod.get("hex", "#cccccc"))
-        brand       = str(prod.get("brand", "-")).upper()
-        product     = str(prod.get("product", "-"))
-        # Produk direkomendasikan berdasarkan kecocokan warna/lightness.
-        # Saran finish/coverage ditampilkan di summary, bukan sebagai atribut produk.
-        finish      = str(rec.get("suggested_finish", ""))
-        coverage    = str(rec.get("suggested_coverage", ""))
-        search_url  = get_search_url(prod)
-        dataset_url = str(prod.get("url", "")).strip()
-        has_url     = dataset_url.startswith("http")
-
-        # Tombol aksi: prioritas ke URL dataset, fallback ke Google Search
-        if has_url:
-            btn_html = (
-                f'<a href="{dataset_url}" target="_blank" rel="noopener" class="prod-btn prod-btn-primary">View Product</a>'
-                f'<a href="{search_url}" target="_blank" rel="noopener" class="prod-btn prod-btn-secondary">Search Online</a>'
-                f'<div class="prod-url-note">Dataset URL · may be outdated</div>'
-            )
-        else:
-            btn_html = (
-                f'<a href="{search_url}" target="_blank" rel="noopener" class="prod-btn prod-btn-secondary">Search Online</a>'
-                f'<div class="prod-url-note">No direct URL in dataset</div>'
-            )
-
-        cards.append(f"""
-        <div class="prod-card">
-            <div class="prod-swatch" style="background:{hex_color};"></div>
-            <div class="prod-body">
-                <span class="prod-rank">#{i} Match</span>
-                <div class="prod-brand">{escape(brand)}</div>
-                <div class="prod-name">{escape(product)}</div>
-                <div class="prod-shade">{escape(shade_text)}</div>
-                <div class="prod-pills">
-                    <span class="prod-pill prod-pill-tone">{escape(str(final_tone))}</span>
-                    <span class="prod-pill prod-pill-match">Color match</span>
-                </div>
-            </div>
-            <div class="prod-actions">{btn_html}</div>
-        </div>""")
-
-    st.markdown('<div class="prod-grid">' + ''.join(cards) + '</div>', unsafe_allow_html=True)
-
-def render_match_summary(final_tone, skin_type_key, finish, coverage):
-    """Render grid 4-kolom berisi ringkasan hasil analisis."""
-    tone_bg = SKIN_TONE_COLORS.get(final_tone, "var(--card-bg)")
-    items = [
-        ("Skin Tone", final_tone,                           "summary-tone-card", f'<div class="summary-tone-accent" style="background:{tone_bg};"></div>'),
-        ("Skin Type", SKIN_TYPE_LABELS_SHORT[skin_type_key], "",                 ""),
-        ("Suggested Finish", finish,                       "",                  ""),
-        ("Suggested Coverage", coverage,                   "",                  ""),
-    ]
-    cards = []
-    for label, value, extra_class, accent_html in items:
-        cards.append(
-            f'<div class="summary-item-html {extra_class}">'
-            f'{accent_html}'
-            f'<div class="summary-item-label">{escape(str(label))}</div>'
-            f'<div class="summary-item-value">{escape(str(value))}</div>'
-            f'</div>'
-        )
-    st.markdown('<div class="summary-grid-html">' + ''.join(cards) + '</div>', unsafe_allow_html=True)
-
-def render_faq(items):
-    """Render FAQ menggunakan native Streamlit expander (theme-aware, no iframe)."""
-    for q, a in items:
-        with st.expander(q):
-            st.markdown(
-                f'<div class="faq-answer-body">{escape(a)}</div>',
-                unsafe_allow_html=True,
-            )
-
 def display_setup_error(missing_files):
     """Tampilkan error jika file model tidak lengkap."""
     st.error("File model belum lengkap di folder `models/`.")
     st.code("\n".join(str(p) for p in missing_files))
+
+def reset_if_new_upload(uploaded_file):
+    """Reset hasil analisis jika user upload foto baru."""
+    name = uploaded_file.name if uploaded_file else None
+    if name != st.session_state.m2s_uploaded_name:
+        st.session_state.m2s_result        = None
+        st.session_state.m2s_uploaded_img  = None
+        st.session_state.m2s_uploaded_name = name
 
 # ============================================================
 # INIT — cek file, load model, inisialisasi session state
@@ -505,7 +409,7 @@ if missing:
     display_setup_error(missing)
     st.stop()
 
-# Load model dan data (di-cache oleh Streamlit)
+# Load model dan data 
 skin_model = load_skin_model()
 face_model = load_face_model()
 skin_meta, face_meta, target_lightness, lightness_range, skin_type_rules, df_foundation = load_assets()
@@ -521,18 +425,11 @@ for key, default in {
     if key not in st.session_state:
         st.session_state[key] = default
 
-def reset_if_new_upload(uploaded_file):
-    """Reset hasil analisis jika user upload foto baru."""
-    name = uploaded_file.name if uploaded_file else None
-    if name != st.session_state.m2s_uploaded_name:
-        st.session_state.m2s_result        = None
-        st.session_state.m2s_uploaded_img  = None
-        st.session_state.m2s_uploaded_name = name
-
 # ============================================================
 # TABS
 # ============================================================
 
+st.markdown('<div class="tabs-top-spacer"></div>', unsafe_allow_html=True)
 tab_match, tab_tips, tab_faq = st.tabs(["Find My Shade", "Makeup Tips", "FAQ"])
 
 # ============================================================
@@ -541,7 +438,7 @@ tab_match, tab_tips, tab_faq = st.tabs(["Find My Shade", "Makeup Tips", "FAQ"])
 
 with tab_match:
 
-    # Header: gunakan desain banner/logo jika tersedia, fallback ke hero HTML.
+    # Header
     if HEADER_IMAGE_PATH.exists():
         header_b64 = base64.b64encode(HEADER_IMAGE_PATH.read_bytes()).decode("utf-8")
         st.markdown(
@@ -562,7 +459,7 @@ with tab_match:
         <div class="section-eyebrow">How it works</div>
         <div class="how-step"><div class="how-step-num">1</div><div class="how-step-text">Upload foto wajah yang jelas dengan pencahayaan natural</div></div>
         <div class="how-step"><div class="how-step-num">2</div><div class="how-step-text">Pilih jenis kulit yang sesuai, seperti oily, dry, combination, normal, atau sensitive.</div></div>
-        <div class="how-step"><div class="how-step-num">3</div><div class="how-step-text">AI akan mendeteksi skin tone dan menampilkan rekomendasi shade foundation yang paling mendekati.</div></div>
+        <div class="how-step"><div class="how-step-num">3</div><div class="how-step-text">AI akan menganalisis skin tone dan memberikan rekomendasi shade foundation yang paling sesuai.</div></div>
     </div>""", unsafe_allow_html=True)
 
     # Preview 4 kategori skin tone
@@ -584,38 +481,50 @@ with tab_match:
             label_visibility="collapsed",
         )
         reset_if_new_upload(uploaded)
+
+        SKIN_TYPE_OPTIONS = [""] + list(SKIN_TYPE_LABELS.keys())
+
         skin_type_key = st.selectbox(
             "Jenis kulit kamu",
-            options=list(SKIN_TYPE_LABELS.keys()),
-            format_func=lambda k: SKIN_TYPE_LABELS[k],
+            options=SKIN_TYPE_OPTIONS,
+            format_func=lambda k: "— Pilih jenis kulit —" if k == "" else SKIN_TYPE_LABELS[k],
+            index=0,
         )
-        analyze_btn = st.button("Find My Match", type="primary", use_container_width=True)
+        analyze_btn = st.button(
+            "Find My Match",
+            type="primary",
+            use_container_width=True,
+            disabled=(skin_type_key == ""),
+        )
 
     # Placeholder sebelum foto diupload
     if uploaded is None:
         st.markdown(
-            '<div style="text-align:center;padding:24px 0 8px;opacity:0.45;font-size:0.9rem;">Upload foto wajahmu untuk memulai</div>',
+            '<div style="text-align:center;padding:24px 0 8px;opacity:0.45;font-size:0.9rem;">Upload foto wajah kamu untuk memulai analisis.</div>',
             unsafe_allow_html=True,
         )
 
     else:
         # Jalankan pipeline saat tombol ditekan
         if analyze_btn:
-            pil_img = Image.open(uploaded).convert("RGB")
-            st.session_state.m2s_uploaded_img = pil_img
-            st.session_state.m2s_skin_type    = skin_type_key
-            with st.spinner("Analyzing your skin tone..."):
-                st.session_state.m2s_result = run_pipeline(
-                    pil_img=pil_img, skin_type=skin_type_key,
-                    top_n=st.session_state.m2s_top_n,
-                    face_model=face_model, face_meta=face_meta,
-                    skin_model=skin_model, skin_meta=skin_meta,
-                    df=df_foundation, target_lightness=target_lightness,
-                    lightness_range=lightness_range, skin_type_rules=skin_type_rules,
-                    manual_tone=None,
-                )
+            if skin_type_key == "":
+                st.warning("Pilih jenis kulit dulu ya!")
+            else:
+                pil_img = Image.open(uploaded).convert("RGB")
+                st.session_state.m2s_uploaded_img = pil_img
+                st.session_state.m2s_skin_type    = skin_type_key
+                with st.spinner("Analyzing your skin tone..."):
+                    st.session_state.m2s_result = run_pipeline(
+                        pil_img=pil_img, skin_type=skin_type_key,
+                        top_n=st.session_state.m2s_top_n,
+                        face_model=face_model, face_meta=face_meta,
+                        skin_model=skin_model, skin_meta=skin_meta,
+                        df=df_foundation, target_lightness=target_lightness,
+                        lightness_range=lightness_range, skin_type_rules=skin_type_rules,
+                        manual_tone=None,
+                    )
         elif st.session_state.m2s_result is None:
-            st.info("Klik tombol di atas untuk menjalankan analisis.")
+            st.info("Klik tombol di atas untuk memulai analisis.")
 
         # Tampilkan hasil jika sudah ada
         if st.session_state.m2s_result is not None:
@@ -632,7 +541,7 @@ with tab_match:
                     "- Gunakan foto close-up wajah yang jelas.\n"
                     "- Hindari foto yang terlalu gelap, blur, atau menggunakan filter ekstrem.\n"
                     "- Pastikan wajah menghadap kamera secara langsung.\n"
-                    "- Jangan mengunggah gambar produk, objek, hewan, pemandangan, atau gambar lain yang bukan wajah manusia."
+                    "- Jangan unggah gambar selain wajah manusia, seperti produk, hewan, objek, atau pemandangan."
                 )
 
             # ── Accepted: tampilkan hasil lengkap ──
@@ -646,16 +555,16 @@ with tab_match:
                 st.divider()
 
                 # Hasil prediksi AI + foto crop
-                st.markdown('<span class="section-eyebrow">Your AI result</span>', unsafe_allow_html=True)
+                st.markdown('<span class="section-eyebrow">YOUR SKIN TONE ANALYSIS</span>', unsafe_allow_html=True)
                 col_result, col_photo = st.columns([1, 1], gap="large")
                 with col_result:
                     st.markdown(f"""
                     <div class="tone-result-wrap" style="background:{tone_bg};color:{tone_txt};">
-                        <div class="tone-result-label">Detected Skin Tone</div>
+                        <div class="tone-result-label">YOUR SKIN TONE</div>
                         <div class="tone-result-value">{ai_tone}</div>
                     </div>""", unsafe_allow_html=True)
                 with col_photo:
-                    st.image(base_result["cropped_img"], caption="Cropped photo used for prediction", use_container_width=True)
+                    st.image(base_result["cropped_img"], caption="Image used for analysis", use_container_width=True)
 
                 # Warning jika prediksi ambigu
                 if ambiguity["is_ambiguous"]:
@@ -675,7 +584,7 @@ with tab_match:
                     st.markdown(
                         '<div class="customize-intro">'
                         '<strong>Adjust your recommendation</strong>'
-                        'Perbaiki hasil AI atau atur jumlah produk yang ditampilkan.'
+                        'Sesuaikan hasil rekomendasi dan jumlah produk yang ditampilkan.'
                         '</div>',
                         unsafe_allow_html=True,
                     )
@@ -704,10 +613,9 @@ with tab_match:
                         if int(st.session_state.m2s_top_n) in [3, 4, 5, 6, 7, 8, 9, 10, 11, 12] else 3,
                         label_visibility="collapsed",
                     )
-                    st.caption(f"Menampilkan {int(top_n)} rekomendasi shade foundation terdekat.")
+                    st.caption(f"Menampilkan {int(top_n)} rekomendasi shade foundation teratas.")
                     st.session_state.m2s_top_n = int(top_n)
 
-                # Rebuild rekomendasi dengan setting terbaru
                 final_result = build_final_recommendation(
                     base_result, skin_type_key, manual_tone, int(top_n),
                     target_lightness, lightness_range, skin_type_rules, df_foundation,
@@ -725,26 +633,63 @@ with tab_match:
                     skin_type_key=skin_type_key,
                     finish=rec["suggested_finish"],
                     coverage=rec["suggested_coverage"],
+                    skin_tone_colors=SKIN_TONE_COLORS,
+                    skin_type_labels_short=SKIN_TYPE_LABELS_SHORT,
                 )
                 st.markdown("<div style='height:4px'></div>", unsafe_allow_html=True)
-                st.caption(f"Source: {'AI prediction' if tone_src == 'ai_prediction' else 'Manual correction by user'}")
+                st.caption(f"Source: {'Match My Shade AI' if tone_src == 'ai_prediction' else 'Manual correction by user'}")
                 st.markdown(f'<div class="tip-box">{rec["tips"]}</div>', unsafe_allow_html=True)
 
                 st.divider()
 
                 # ── Product Recommendations ──
                 st.markdown(f'<span class="section-eyebrow">Top {int(top_n)} Color Matches</span>', unsafe_allow_html=True)
-                st.markdown(f'<div class="section-heading">{final_tone} shade matches for you</div>', unsafe_allow_html=True)
-                st.caption("Produk diurutkan berdasarkan kecocokan warna/lightness. Saran finish dan coverage bersifat panduan tambahan sesuai jenis kulit.")
+                st.markdown(f'<div class="section-heading">Your best foundation matches</div>', unsafe_allow_html=True)
+                st.caption("Produk diurutkan berdasarkan tingkat kecocokan shade dan lightness. Finish dan coverage yang disarankan disesuaikan dengan jenis kulit.")
                 render_product_cards(rec["recommended_products"], final_tone, rec)
 
                 st.divider()
 
-                # Footer model info
+                # ── Shareable Shade Card ──
+                st.markdown('<span class="section-eyebrow">Share Your Results</span>', unsafe_allow_html=True)
 
+                preview_products = rec.get("recommended_products", [])[:5]
+                dots_html = "".join(
+                    f'<div class="share-card-swatch-dot" style="background:{p.get("hex", "#C98F68")};"></div>'
+                    for p in preview_products
+                )
+                st.markdown(
+                    '<div class="share-card-panel">'
+                    '<div class="share-card-title">Share your shade match ✨</div>'
+                    '<div class="share-card-desc">Create a shareable card featuring your Top 5 shade matches. Your uploaded photo is not included.</div>'
+                    f'<div class="share-card-swatches">{dots_html}'
+                    '<span class="share-card-swatch-label">Your Top 5 palette</span></div>'
+                    '</div>',
+                    unsafe_allow_html=True,
+                )
+
+                shade_png = create_shade_card_png(final_result, skin_type_key)
+                file_tone = str(final_tone).lower().replace(" ", "-")
+                st.download_button(
+                    "Save My Shade Card",
+                    data=shade_png,
+                    file_name=f"matchmyshade-{file_tone}-shade-card.png",
+                    mime="image/png",
+                    use_container_width=True,
+                    type="primary",
+                )
+
+                st.caption("Save your shade card and share it anywhere.")
+
+                st.divider()
+
+                # Footer model info
                 accuracy = skin_meta.get("test_accuracy", 0)
                 f1_val   = skin_meta.get("test_f1_score", None)
-                footer   = f"MatchMyShade model: MobileNetV2 Fine-tuned · Test accuracy: {accuracy:.1%}"
+                footer = (
+                    f"Powered by MatchMyShade AI · MobileNetV2 (Fine-tuned) · "
+                    f"Test accuracy: {accuracy:.1%}"
+                )
                 if f1_val:
                     footer += f" · F1-score: {f1_val:.1%}"
                 st.caption(footer)
@@ -761,7 +706,7 @@ with tab_tips:
     </div>
     """, unsafe_allow_html=True)
 
-    # Card 1: Cara memilih shade (tetap hardcode, tidak berubah)
+    # Card 1: Cara memilih shade 
     st.markdown("""
     <div class="tips-section-wrap">
       <div class="tips-card">
@@ -780,7 +725,7 @@ with tab_tips:
     </div>
     """, unsafe_allow_html=True)
 
-    # Card 2: Tips per jenis kulit — dinamis dari skin_type_rules
+    # Card 2: Tips per jenis kulit 
     skin_order = ["oily", "dry", "combination", "sensitive", "normal"]
 
     skin_items_html = ""
@@ -794,11 +739,11 @@ with tab_tips:
         span = 'style="grid-column: span 2;"' if key == "normal" else ""
         skin_items_html += f"""
         <div class="tips-skin-item" {span}>
-            <div class="tips-skin-label">{escape(label)}</div>
-            <div class="tips-skin-desc">{escape(tips)}</div>
+            <div class="tips-skin-label">{label}</div>
+            <div class="tips-skin-desc">{tips}</div>
             <div class="tips-skin-meta">
-                <span class="prod-pill prod-pill-finish">{escape(finish)}</span>
-                <span class="prod-pill prod-pill-coverage">{escape(coverage)}</span>
+                <span class="prod-pill prod-pill-finish">{finish}</span>
+                <span class="prod-pill prod-pill-coverage">{coverage}</span>
             </div>
         </div>"""
 
@@ -837,22 +782,26 @@ with tab_tips:
 # ============================================================
 
 FAQ_ITEMS = [
-    ("Apakah foto saya disimpan?",
-     "Tidak. Foto hanya diproses sementara di memori saat sesi berjalan dan tidak pernah disimpan ke server atau database manapun."),
-    ("Apakah ada database pengguna?",
-     "Tidak. MatchMyShade tidak menyimpan akun, identitas, atau riwayat foto pengguna."),
-    ("Apakah hasil skin tone selalu akurat?",
-     "Tidak selalu. Pencahayaan, kualitas kamera, filter, dan angle wajah bisa mempengaruhi hasil. Karena itu tersedia opsi koreksi manual."),
+    ("Apakah foto saya aman dan tidak disimpan?",
+     "Iya, aman. Foto kamu hanya diproses sementara di memori selama sesi berlangsung, setelah sesi selesai atau browser ditutup, foto langsung hilang. Kami tidak menyimpan foto, identitas, atau data apapun ke server maupun database. Tidak ada yang melihat foto kamu selain kamu sendiri."),
+
+    ("Apakah hasil deteksi skin tone selalu akurat?",
+     "Tidak selalu, dan itu wajar. Hasil bisa dipengaruhi oleh pencahayaan ruangan, kualitas kamera, penggunaan filter, atau sudut wajah saat foto diambil. Untuk hasil terbaik, gunakan foto wajah yang jelas dengan cahaya natural tanpa filter. Jika hasil AI dirasa kurang tepat, kamu bisa menggunakan opsi koreksi manual untuk memilih skin tone sendiri."),
+
     ("Apa saja kategori skin tone yang digunakan?",
-     "Model menggunakan 4 kategori: Fair, Medium, Tan, dan Deep berdasarkan nilai lightness warna kulit."),
-    ("Kenapa rekomendasi AI dan manual bisa berbeda?",
-     "Rekomendasi AI menggunakan target lightness dinamis berdasarkan confidence model pada foto yang diunggah, sedangkan manual correction menggunakan target lightness tetap dari skin tone yang dipilih pengguna. Karena itu, hasil rekomendasi bisa sedikit berbeda."),
-    ("Kenapa ada dua tombol di product card?",
-     "View Product mengarah ke halaman produk di dataset jika tersedia. Search Online mengarah ke Google Search. Link dataset mungkin sudah outdated, jadi opsi search disediakan sebagai fallback."),
-    ("Haruskah saya tetap cek shade langsung?",
-     "Iya. Aplikasi ini membantu mempersempit pilihan, tetapi hasil akhir tetap sebaiknya dicek langsung karena undertone, oksidasi, dan formula bisa berbeda di kulit masing-masing."),
+     "MatchMyShade menggunakan 4 kategori skin tone: Fair (cerah), Medium (sedang), Tan (sawo matang), dan Deep (gelap). Kategori ini ditentukan berdasarkan nilai lightness warna kulit dari foto yang diunggah. Setiap kategori memiliki kisaran lightness shade foundation yang berbeda agar rekomendasinya lebih relevan."),
+
+    ("Kenapa rekomendasi AI dan koreksi manual bisa berbeda?",
+     "Rekomendasi AI dibuat khusus berdasarkan foto yang kamu upload, jadi hasilnya unik untuk kamu. Kalau kamu pakai koreksi manual, kamu memilih sendiri kategori skin tone-nya — tapi rekomendasinya tetap disesuaikan dengan warna kulitmu dari foto, bukan hasil yang generik."),
+
+    ("Kenapa link produk ada yang tidak bisa dibuka?",
+     "Beberapa link di tombol View Product berasal dari dataset dan mungkin sudah tidak aktif atau berubah. Karena itu kami juga menyediakan tombol Search Online yang langsung mencari produk tersebut di Google sebagai alternatif."),
+
+    ("Haruskah saya tetap coba shade langsung?",
+     "Sangat disarankan. MatchMyShade membantu mempersempit pilihan shade berdasarkan kecocokan warna, tapi hasil akhirnya tetap bisa berbeda di kulit masing-masing karena faktor undertone, oksidasi formula, dan kondisi kulit. Gunakan rekomendasi ini sebagai titik awal, lalu cek langsung jika memungkinkan."),
+
     ("Kenapa wajah saya tidak terdeteksi?",
-     "Pastikan foto menampilkan wajah dengan jelas, pencahayaan cukup, dan menghadap kamera. Hindari foto blur, terlalu gelap, atau memakai filter ekstrem."),
+     "Pastikan foto menampilkan wajah secara jelas, menghadap kamera, dengan pencahayaan yang cukup. Hindari foto yang terlalu gelap, blur, atau menggunakan filter ekstrem. Foto selfie close-up tanpa filter biasanya memberikan hasil terbaik."),
 ]
 
 with tab_faq:

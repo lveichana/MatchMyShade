@@ -397,7 +397,7 @@ div[data-testid="stExpander"]:hover {
 }
 div[data-testid="stExpander"] summary {
     font-family: 'DM Sans', sans-serif !important;
-    font-size: 1.08rem !important; font-weight: 800 !important;
+    font-size: 1.2rem !important; font-weight: 800 !important;
     color: var(--text-color) !important;
     padding: 18px 22px !important;
 }
@@ -424,8 +424,8 @@ hr { margin: 2rem 0 !important; border-color: rgba(194, 116, 138, 0.35) !importa
 
 /* ── RESPONSIVE ── */
 @media (prefers-color-scheme: dark) {
-    div[data-testid="stTabs"] button[data-baseweb="tab"] p { color: #F5C6D2 !important; }
-    div[data-testid="stTabs"] button[data-baseweb="tab"][aria-selected="true"] p { color: #FFE0EA !important; }
+    div[data-testid="stTabs"] button[data-baseweb="tab"] p { color: #cd7d91 !important; }
+    div[data-testid="stTabs"] button[data-baseweb="tab"][aria-selected="true"] p { color: #ddbbc6 !important; }
 }
 @media (max-width: 800px) {
     .summary-grid-html {
@@ -997,3 +997,103 @@ hr { margin: 2rem 0 !important; border-color: rgba(194, 116, 138, 0.35) !importa
         font-size: 0.9rem !important;
     }
 }
+
+.tabs-top-spacer {
+    height: 34px;
+}
+
+div[data-baseweb="tab-list"] {
+    min-height: 64px !important;
+    padding-top: 14px !important;
+    overflow: visible !important;
+}
+
+button[data-baseweb="tab"] {
+    min-height: 48px !important;
+    padding-top: 12px !important;
+    padding-bottom: 12px !important;
+    overflow: visible !important;
+}
+
+button[data-baseweb="tab"] p {
+    line-height: 1.4 !important;
+    margin: 0 !important;
+    overflow: visible !important;
+}
+
+/* ── SHARE RESULT CARD SECTION ── */
+.share-card-panel {
+    margin: 0.8rem 0 1.1rem 0;
+    padding: 1.25rem 1.35rem;
+    border-radius: 24px;
+    border: 1.5px solid rgba(194, 116, 138, 0.28);
+    background:
+        radial-gradient(circle at top left, rgba(255, 226, 234, 0.95), transparent 42%),
+        linear-gradient(135deg, rgba(255, 248, 250, 0.98), rgba(255, 241, 245, 0.92));
+    box-shadow: 0 14px 34px rgba(90, 45, 58, 0.08);
+}
+
+.share-card-title {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 1.25rem;
+    font-weight: 900;
+    letter-spacing: 0.02em;
+    color: #9B3F5D;
+    margin-bottom: 0.35rem;
+}
+
+.share-card-desc {
+    font-size: 0.94rem;
+    line-height: 1.65;
+    color: rgba(55, 35, 42, 0.72);
+}
+
+.share-card-swatches {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 0.85rem;
+}
+
+.share-card-swatch-dot {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    border: 2px solid #FFFFFF;
+    box-shadow: 0 0 0 1.5px rgba(194, 116, 138, 0.35), 0 4px 10px rgba(90, 45, 58, 0.08);
+    flex-shrink: 0;
+}
+
+.share-card-swatch-label {
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: #9B3F5D;
+    margin-left: 0.25rem;
+}
+
+/* Download button dibuat satu style dengan primary button utama */
+div[data-testid="stDownloadButton"] > button {
+    background: linear-gradient(135deg, #C2748A 0%, #9E4F65 100%) !important;
+    border: none !important;
+    color: #FFFFFF !important;
+    font-family: 'DM Sans', sans-serif !important;
+    font-weight: 800 !important;
+    font-size: 0.9rem !important;
+    letter-spacing: 0.08em !important;
+    text-transform: uppercase !important;
+    border-radius: 50px !important;
+    padding: 0.75rem 2rem !important;
+    box-shadow: 0 6px 20px rgba(158, 79, 101, 0.30) !important;
+    transition: all 0.25s ease !important;
+}
+
+div[data-testid="stDownloadButton"] > button:hover {
+    transform: translateY(-2px) !important;
+    box-shadow: 0 10px 28px rgba(158, 79, 101, 0.40) !important;
+}
+
+div[data-testid="stDownloadButton"] > button p {
+    color: #FFFFFF !important;
+    font-weight: 800 !important;
+}
+
